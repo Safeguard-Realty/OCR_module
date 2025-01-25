@@ -56,11 +56,12 @@ This Python script extracts key information from Aadhar cards, PAN cards, and Pa
    
 
 3. **Set the Together API Key:**:
+   ```bash
+   export TOGETHER_API_KEY="your_api_key_here"
 
 -Export the API key as an environment variable:
 
-   ```bash
-   export TOGETHER_API_KEY="your_api_key_here"
+   
 
 -Alternatively, you can hardcode the API key in the script (not recommended for security reasons).
 
