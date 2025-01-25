@@ -28,8 +28,8 @@ This Python script extracts key information from Aadhar cards, PAN cards, and Pa
 
 2. **Clone the Repository**:
    ```bash
-   git clone https://github.com/yourusername/document-extractor.git
-   cd document-extractor
+   git clone https://github.com/Safeguard-Realty/OCR_module.git
+   cd OCR_module
 
 3. **Build the Docker Image**:
 
@@ -40,38 +40,35 @@ This Python script extracts key information from Aadhar cards, PAN cards, and Pa
 
    ```bash
  
-   docker run -it --rm -e TOGETHER_API_KEY="your_api_key_here" document-extractor
+   docker run -it --rm -e TOGETHER_API_KEY="your_api_key_here" ocr-module
   ##Replace your_api_key_here with your actual Together API key.
 
 ### Option 2 Local Installation
 
- 1. Clone the Repository:
-
+1. **Clone the Repository:**:
    ```bash
+   git clone https://github.com/Safeguard-Realty/OCR_module.git
+   cd OCR_module
 
-   git clone https://github.com/yourusername/document-extractor.git
-   cd document-extractor 
-
- 2. Install Dependencies:
-
+2. **Install Dependencies:**:
    ```bash
-
    pip install -r requirements.txt
- 3. Set the Together API Key:
+   
 
- Export the API key as an environment variable:
+3. **Set the Together API Key:**:
+
+-Export the API key as an environment variable:
 
    ```bash
-
    export TOGETHER_API_KEY="your_api_key_here"
-Alternatively, you can hardcode the API key in the script (not recommended for security reasons).
 
- 4. Run the Script:
+-Alternatively, you can hardcode the API key in the script (not recommended for security reasons).
+
+4. **Run the Script:**:
 
    ```bash
-
-   python merged_processor.py
-
+ 
+   python main.py
 
 
 # Example Inputs
