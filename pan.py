@@ -1,7 +1,8 @@
 import os
-from together import Together
 import re
 import json
+import time
+from together import Together
 
 # Use environment variable for API key
 client = Together(api_key="39656070d13a550e3638ce21dad42231137f331e10647d97064f5f050779363c")
@@ -21,10 +22,10 @@ def extract_pan_card_details(image_url):
 3. Do not add any explanatory text
 
 Required Fields:
-- PAN Card Number: Exact 10-digit alphanumeric code
+- PAN Card Number: Exact 10-digit alphanumeric code (e.g., ABCD1234E)
 - Name: Full name exactly as printed
 - Father's Name: Exact father's name 
-- Date of Birth: Exact date printed
+- Date of Birth: Exact date printed in DD/MM/YYYY format
 
 Output Format (MANDATORY):
 {
@@ -35,7 +36,6 @@ Output Format (MANDATORY):
 }
 DO NOT include any additional text or explanation.
 ONLY return the JSON object with extracted values.
-
                 """
             },
             {
@@ -54,7 +54,7 @@ ONLY return the JSON object with extracted values.
                 ]
             }
         ],
-        max_tokens=300,  # Set a reasonable max token limit
+        max_tokens=300,
         temperature=0.7,
         top_p=0.7,
         top_k=50,
@@ -62,19 +62,9 @@ ONLY return the JSON object with extracted values.
         stop=["<|eot_id|>", "<|eom_id|>"],
         stream=False
     )
-
-    # Directly access the response content
     return response.choices[0].message.content
 
 def parse_to_dict(text):
-    # Define regex patterns for each field
-    patterns = {
-        'panCardNumber': r'\*\*PAN Card Number:\*\*\s*(\w+)',
-        'name': r'\*\*Name:\*\*\s*([\*\s]*[^\n]+)',
-        'fatherName': r'\*\*Father\'s Name:\*\*\s*([\*\s]*[^\n]+)',
-        'dateOfBirth': r'\*\*Date of Birth:\*\*\s*(\d{2}/\d{2}/\d{4})'
-    }
-    
     details = {
         'panCardNumber': '',
         'name': '',
@@ -82,17 +72,56 @@ def parse_to_dict(text):
         'dateOfBirth': ''
     }
     
-    for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.MULTILINE)
-        if match:
-            # Clean up the extracted value by removing leading asterisks and extra spaces
-            details[key] = match.group(1).replace('*', '').strip()
+    # First, attempt to parse as JSON
+    try:
+        data = json.loads(text)
+        details['panCardNumber'] = data.get('panCardNumber', '').strip()
+        details['name'] = data.get('name', '').strip()
+        details['fatherName'] = data.get('fatherName', '').strip()
+        details['dateOfBirth'] = data.get('dateOfBirth', '').strip()
+    except json.JSONDecodeError:
+        pass  # Proceed to regex parsing if JSON fails
+    
+    # If any field is missing, use regex to extract
+    if not all(details.values()):
+        patterns = {
+        'panCardNumber': r'(?:\*|\#|-|\s)*PAN Card Number(?:\*|\#|-|\s)*:(?:\*|\#|-|\s)*(\w{10})',
+        'name': r'(?:\*|\#|-|\s)*Name(?:\*|\#|-|\s)*:(?:\*|\#|-|\s)*([\w\s]+)',
+        'fatherName': r'(?:\*|\#|-|\s)*Father\'s Name(?:\*|\#|-|\s)*:(?:\*|\#|-|\s)*([\w\s]+)',
+        'dateOfBirth': r'(?:\*|\#|-|\s)*Date of Birth(?:\*|\#|-|\s)*:(?:\*|\#|-|\s)*(\d{2}/\d{2}/\d{4})'
+    }
+        
+        for key, pattern in patterns.items():
+            if details[key]:  # Skip if already found via JSON
+                continue
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                details[key] = match.group(1).strip()
     
     return details
 
 if __name__ == "__main__":
     image_url = "https://5.imimg.com/data5/SB/WU/KT/ANDROID-33737889/product-jpeg-500x500.jpg"
-    result = extract_pan_card_details(image_url)
-    result_dict = parse_to_dict(result)
+    max_retries = 5
+    retries = 0
+    result_dict = {}
+    
+    while retries <= max_retries:
+        result = extract_pan_card_details(image_url)
+        current_dict = parse_to_dict(result)
+        
+
+        if all(current_dict.values()):
+            result_dict = current_dict
+            break
+        else:
+
+            result_dict = current_dict
+            retries += 1
+            if retries <= max_retries:
+                time.sleep(1)  # Short delay before retry
+    else:
+        print("Please submit the image again")
+    
     print(json.dumps(result_dict, indent=2))
-    # print(result)
+    print("Retries taken",retries)

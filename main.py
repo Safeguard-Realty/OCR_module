@@ -1,13 +1,22 @@
 import re
 import json
+import time
 from together import Together
 from dotenv import load_dotenv
 import os
 
-
 load_dotenv()
 
 client = Together(api_key=os.getenv("TOGETHER_API_KEY"))
+
+# ==================== Required Fields Configuration ====================
+REQUIRED_FIELDS = {
+    'aadhar': ['Name', 'Date_Of_Birth', 'Gender', 'Aadhar_No', 'Address'],
+    'pan': ['panCardNumber', 'name', 'fatherName', 'dateOfBirth'],
+    'passport': ['Passport_No', 'Surname', 'Given_Name', 'Nationality', 'Sex',
+                 'Date_of_Birth', 'Place_of_Birth', 'Date_of_Issue',
+                 'Date_of_Expiry', 'Place_of_Issue']
+}
 
 # ==================== Aadhar Card Functions ====================
 def extract_aadhar_details(image_url):
@@ -72,16 +81,26 @@ def extract_aadhar_details(image_url):
     return response.choices[0].message.content
 
 def parse_aadhar_details(text):
-    # First try to extract valid JSON
+    details = {
+        'Name': '',
+        'Date_Of_Birth': '',
+        'Gender': '',
+        'Aadhar_No': '',
+        'Address': ''
+    }
+    
+    # First try JSON parsing
     try:
-        # Match FIRST valid JSON object only
         json_match = re.search(r'\{[\s\S]*?\}(?=\s*\Z|\s*\{)', text, re.DOTALL)
         if json_match:
-            return json.loads(json_match.group().strip())
+            data = json.loads(json_match.group().strip())
+            for key in details:
+                val = data.get(key, '').strip()
+                if val: details[key] = val
     except:
         pass
-
-    # If JSON extraction fails, proceed with regex patterns
+    
+    # Regex fallback
     patterns = {
         'Name': r'(?:Name|NAME)[\s:*]+([A-Za-z\s]+)',
         'Date_Of_Birth': r'(?:Date\s*Of?\s*Birth|DOB)[\s:*]+(\d{2}/\d{2}/\d{4})',
@@ -90,15 +109,15 @@ def parse_aadhar_details(text):
         'Address': r'(?:Address|ADDRESS)[\s:*]+([^*]+?)(?=\s*\*|$)'
     }
 
-    details = {}
     for line in text.split('\n'):
         line = line.strip()
         for key, pattern in patterns.items():
+            if details[key]:  # Skip if already found
+                continue
             match = re.search(pattern, line, re.IGNORECASE)
-            if match and not details.get(key):
+            if match:
                 details[key] = match.group(1).strip()
-
-    # Normalization logic remains same
+    
     return details
 
 # ==================== PAN Card Functions ====================
@@ -131,7 +150,6 @@ Output Format (MANDATORY):
 }
 DO NOT include any additional text or explanation.
 ONLY return the JSON object with extracted values.
-
                 """
             },
             {
@@ -150,7 +168,7 @@ ONLY return the JSON object with extracted values.
                 ]
             }
         ],
-        max_tokens=300,  # Set a reasonable max token limit
+        max_tokens=300,
         temperature=0.7,
         top_p=0.7,
         top_k=50,
@@ -158,19 +176,9 @@ ONLY return the JSON object with extracted values.
         stop=["<|eot_id|>", "<|eom_id|>"],
         stream=False
     )
-
-    # Directly access the response content
     return response.choices[0].message.content
 
 def parse_pan_details(text):
-    # Define regex patterns for each field
-    patterns = {
-        'panCardNumber': r'\*\*PAN Card Number:\*\*\s*(\w+)',
-        'name': r'\*\*Name:\*\*\s*([\*\s]*[^\n]+)',
-        'fatherName': r'\*\*Father\'s Name:\*\*\s*([\*\s]*[^\n]+)',
-        'dateOfBirth': r'\*\*Date of Birth:\*\*\s*(\d{2}/\d{2}/\d{4})'
-    }
-    
     details = {
         'panCardNumber': '',
         'name': '',
@@ -178,11 +186,29 @@ def parse_pan_details(text):
         'dateOfBirth': ''
     }
     
+    # Try JSON parsing first
+    try:
+        data = json.loads(text)
+        for key in details:
+            val = data.get(key, '').strip()
+            if val: details[key] = val
+    except:
+        pass
+    
+    # Regex patterns with improved formatting handling
+    patterns = {
+        'panCardNumber': r'(?:\*|\#|-|\s)*PAN Card Number(?:\*|\#|-|\s)*:(?:\*|\#|-|\s)*(\w{10})',
+        'name': r'(?:\*|\#|-|\s)*Name(?:\*|\#|-|\s)*:(?:\*|\#|-|\s)*([\w\s]+)',
+        'fatherName': r'(?:\*|\#|-|\s)*Father\'s Name(?:\*|\#|-|\s)*:(?:\*|\#|-|\s)*([\w\s]+)',
+        'dateOfBirth': r'(?:\*|\#|-|\s)*Date of Birth(?:\*|\#|-|\s)*:(?:\*|\#|-|\s)*(\d{2}/\d{2}/\d{4})'
+    }
+    
     for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.MULTILINE)
+        if details[key]:  # Skip if already found
+            continue
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
         if match:
-            # Clean up the extracted value by removing leading asterisks and extra spaces
-            details[key] = match.group(1).replace('*', '').strip()
+            details[key] = match.group(1).strip()
     
     return details
 
@@ -249,7 +275,7 @@ def extract_passport_details(image_url):
                 ]
             }
         ],
-        max_tokens=500,  # Increased token limit for passport details
+        max_tokens=500,
         temperature=0.7,
         top_p=0.7,
         top_k=50,
@@ -257,68 +283,130 @@ def extract_passport_details(image_url):
         stop=["<|eot_id|>", "<|eom_id|>"],
         stream=False
     )
-
-    # Directly access the response content
     return response.choices[0].message.content
 
 def parse_passport_details(text):
-    patterns = {
-        'Passport_No': r'(?:Passport\s*(?:No|Number)\s*[:.]?\s*)([A-Z]{1,2}\d{7})',  
-        'Surname': r'(?:Surname:?\s*)([A-Z]+)',
-        'Given_Name': r'(?:Given\s*[Nn]ame:?\s*)([A-Z\s]+)',
-        'Nationality': r'(?:Nationality:?\s*)([A-Z]+)',
-        'Sex': r'(?:Sex:?\s*)([MF])',
-        'Date_of_Birth': r'(?:Date\s*of\s*[Bb]irth:?\s*)(\d{2}/\d{2}/\d{4})',
-        'Place_of_Birth': r'(?:Place\s*of\s*[Bb]irth:?\s*)([A-Za-z\s]+)',
-        'Date_of_Issue': r'(?:Date\s*of\s*[Ii]ssue:?\s*)(\d{2}/\d{2}/\d{4})',
-        'Date_of_Expiry': r'(?:Date\s*of\s*[Ee]xpiry:?\s*)(\d{2}/\d{2}/\d{4})',
-        'Place_of_Issue': r'(?:Place\s*of\s*[Ii]ssue:?\s*)([A-Za-z\s]+)'
+    details = {
+        'Passport_No': '',
+        'Surname': '',
+        'Given_Name': '',
+        'Nationality': '',
+        'Sex': '',
+        'Date_of_Birth': '',
+        'Place_of_Birth': '',
+        'Date_of_Issue': '',
+        'Date_of_Expiry': '',
+        'Place_of_Issue': '',
+        'Full_Name': ''
     }
     
-    details = {key: '' for key in patterns}
-    details['Full_Name'] = ''
+    # Try JSON parsing first
+    try:
+        data = json.loads(text)
+        for key in details:
+            val = data.get(key, '').strip()
+            if val: details[key] = val
+    except:
+        pass
+    
+    # Enhanced regex patterns
+    patterns = {
+        'Passport_No': r'(?:Passport\s*(?:No|Number)[:\s\-*"]*)([A-Z]{1,2}\d{7})',
+        'Surname': r'(?:Surname[:\s\-*"]*)([A-Za-z]+)',
+        'Given_Name': r'(?:Given\s*Name[:\s\-*"]*)([A-Za-z\s]+)',
+        'Nationality': r'(?:Nationality[:\s\-*"]*)([A-Za-z]+)',
+        'Sex': r'(?:Sex[:\s\-*"]*)([MF])',
+        'Date_of_Birth': r'(?:Date\s*of\s*Birth[:\s\-*"]*)(\d{2}/\d{2}/\d{4})',
+        'Place_of_Birth': r'(?:Place\s*of\s*Birth[:\s\-*"]*)([A-Za-z\s]+)',
+        'Date_of_Issue': r'(?:Date\s*of\s*Issue[:\s\-*"]*)(\d{2}/\d{2}/\d{4})',
+        'Date_of_Expiry': r'(?:Date\s*of\s*Expiry[:\s\-*"]*)(\d{2}/\d{2}/\d{4})',
+        'Place_of_Issue': r'(?:Place\s*of\s*Issue[:\s\-*"]*)([A-Za-z\s]+)',
+        'Full_Name': r'(?:Full\s*Name[:\s\-*"]*)([A-Za-z\s]+)'
+    }
     
     for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.MULTILINE | re.IGNORECASE)
+        if details[key]:  # Skip if already found
+            continue
+        match = re.search(pattern, text, re.IGNORECASE)
         if match:
             details[key] = match.group(1).strip()
     
-    # Combine Surname and Given Name
-    if details['Surname'] and details['Given_Name']:
-        details['Full_Name'] = f"{details['Surname']} {details['Given_Name']}".strip()
+    # Construct Full_Name if missing
+    if not details['Full_Name'] and details['Surname'] and details['Given_Name']:
+        details['Full_Name'] = f"{details['Surname']} {details['Given_Name']}"
     
     return details
 
-# ==================== Unified Processor ====================
-def process_document(image_url, doc_type):
-    """Main processing function"""
-    if doc_type == 'aadhar':
-        raw = extract_aadhar_details(image_url)
-        parsed = parse_aadhar_details(raw)
-    elif doc_type == 'pan':
-        raw = extract_pan_card_details(image_url)
-        parsed = parse_pan_details(raw)
-    elif doc_type == 'passport':
-        raw = extract_passport_details(image_url)
-        parsed = parse_passport_details(raw)
-    else:
-        raise ValueError("Unsupported document type. Please choose 'aadhar', 'pan', or 'passport'.")
+# ==================== Unified Processor with Retry Logic ====================
+def process_document(image_url, doc_type, max_retries=3):
+    """Main processing function with retry mechanism"""
+    best_result = None
+    retries = 0
+    
+    while retries <= max_retries:
+        try:
+            # Extract and parse
+            if doc_type == 'aadhar':
+                raw = extract_aadhar_details(image_url)
+                parsed = parse_aadhar_details(raw)
+            elif doc_type == 'pan':
+                raw = extract_pan_card_details(image_url)
+                parsed = parse_pan_details(raw)
+            elif doc_type == 'passport':
+                raw = extract_passport_details(image_url)
+                parsed = parse_passport_details(raw)
+            else:
+                raise ValueError("Unsupported document type")
+            
+            # Create current result
+            current_result = {
+                "document_type": doc_type,
+                "raw_output": raw,
+                "parsed_data": parsed
+            }
+            
+            # Check required fields
+            required = REQUIRED_FIELDS[doc_type]
+            all_present = all(parsed.get(field, '') for field in required)
+            
+            if all_present:
+                best_result = current_result
+                break
+            else:
+                # Update best result if better than previous
+                if best_result is None or sum(len(v) for v in parsed.values()) > sum(len(v) for v in best_result['parsed_data'].values()):
+                    best_result = current_result
+                
+                retries += 1
+                if retries <= max_retries:
+                    time.sleep(1)  # API rate limit protection
+                    
+        except Exception as e:
+            print(f"Error during processing: {str(e)}")
+            retries += 1
+            if retries <= max_retries:
+                time.sleep(1)
+    
+    # Post-retry validation
+    if best_result is None:
+        raise RuntimeError("Failed to process document after maximum retries")
+    
+    # Final check for missing fields
+    required = REQUIRED_FIELDS[doc_type]
+    missing = [field for field in required if not best_result['parsed_data'].get(field, '')]
+    if missing:
+        print(f"Warning: Missing fields after {max_retries} retries: {', '.join(missing)}")
+    
+    return best_result
 
-    return {
-        "document_type": doc_type,
-        "raw_output": raw,
-        "parsed_data": parsed
-    }
-
+# ==================== Main Execution ====================
 if __name__ == "__main__":
-    # Ask user for document type
     print("Please specify the document type:")
     print("1. Aadhar Card")
     print("2. PAN Card")
     print("3. Passport")
     choice = input("Enter your choice (1/2/3): ").strip()
     
-    # Map choice to document type
     doc_type_map = {
         '1': 'aadhar',
         '2': 'pan',
@@ -332,11 +420,11 @@ if __name__ == "__main__":
     doc_type = doc_type_map[choice]
     image_url = input(f"Enter the {doc_type} image URL: ").strip()
     
-    # Process the document
-    result = process_document(image_url, doc_type)
+    # Process with retries
+    result = process_document(image_url, doc_type, max_retries=3)
     
     print("\nDocument Type:", result['document_type'])
-    # print("\nRaw Output:")
-    # print(result['raw_output'])
+    print("\nRaw Output:")
+    print(result['raw_output'])
     print("\nParsed Data:")
     print(json.dumps(result['parsed_data'], indent=2))

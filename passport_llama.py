@@ -81,30 +81,55 @@ def extract_passport_details(image_url):
     return response.choices[0].message.content
 
 def parse_passport_details(text):
-    patterns = {
-        'Passport_No': r'(?:Passport\s*(?:No|Number)\s*[:.]?\s*)([A-Z]{1,2}\d{7})',  
-        'Surname': r'(?:Surname:?\s*)([A-Z]+)',
-        'Given_Name': r'(?:Given\s*[Nn]ame:?\s*)([A-Z\s]+)',
-        'Nationality': r'(?:Nationality:?\s*)([A-Z]+)',
-        'Sex': r'(?:Sex:?\s*)([MF])',
-        'Date_of_Birth': r'(?:Date\s*of\s*[Bb]irth:?\s*)(\d{2}/\d{2}/\d{4})',
-        'Place_of_Birth': r'(?:Place\s*of\s*[Bb]irth:?\s*)([A-Za-z\s]+)',
-        'Date_of_Issue': r'(?:Date\s*of\s*[Ii]ssue:?\s*)(\d{2}/\d{2}/\d{4})',
-        'Date_of_Expiry': r'(?:Date\s*of\s*[Ee]xpiry:?\s*)(\d{2}/\d{2}/\d{4})',
-        'Place_of_Issue': r'(?:Place\s*of\s*[Ii]ssue:?\s*)([A-Za-z\s]+)'
+    details = {
+        'Passport_No': '',
+        'Surname': '',
+        'Given_Name': '',
+        'Nationality': '',
+        'Sex': '',
+        'Date_of_Birth': '',
+        'Place_of_Birth': '',
+        'Date_of_Issue': '',
+        'Date_of_Expiry': '',
+        'Place_of_Issue': '',
+        'Full_Name': ''
     }
     
-    details = {key: '' for key in patterns}
-    details['Full_Name'] = ''
+    # Attempt JSON parsing first
+    try:
+        data = json.loads(text)
+        for key in details:
+            val = data.get(key, '').strip()
+            if val: details[key] = val
+    except json.JSONDecodeError:
+        pass
     
+    # Enhanced Regex Patterns with case insensitivity and formatting flexibility
+    patterns = {
+        'Passport_No': r'(?:[\*\-]\s*)?Passport\s*(?:No|Number)\s*[:.\-]*\s*["\']*([A-Z]{1,2}\d{7})["\']*',
+        'Surname': r'(?:[\*\-]\s*)?Surname\s*[:.\-]*\s*["\']*([A-Za-z]+)["\']*',
+        'Given_Name': r'(?:[\*\-]\s*)?Given\s*Name\s*[:.\-]*\s*["\']*([A-Za-z\s]+)["\']*',
+        'Nationality': r'(?:[\*\-]\s*)?Nationality\s*[:.\-]*\s*["\']*([A-Za-z]+)["\']*',
+        'Sex': r'(?:[\*\-]\s*)?Sex\s*[:.\-]*\s*["\']*([MF])["\']*',
+        'Date_of_Birth': r'(?:[\*\-]\s*)?Date\s*of\s*Birth\s*[:.\-]*\s*["\']*(\d{2}/\d{2}/\d{4})["\']*',
+        'Place_of_Birth': r'(?:[\*\-]\s*)?Place\s*of\s*Birth\s*[:.\-]*\s*["\']*([A-Za-z\s]+)["\']*',
+        'Date_of_Issue': r'(?:[\*\-]\s*)?Date\s*of\s*Issue\s*[:.\-]*\s*["\']*(\d{2}/\d{2}/\d{4})["\']*',
+        'Date_of_Expiry': r'(?:[\*\-]\s*)?Date\s*of\s*Expiry\s*[:.\-]*\s*["\']*(\d{2}/\d{2}/\d{4})["\']*',
+        'Place_of_Issue': r'(?:[\*\-]\s*)?Place\s*of\s*Issue\s*[:.\-]*\s*["\']*([A-Za-z\s]+)["\']*',
+        'Full_Name': r'(?:[\*\-]\s*)?Full\s*Name\s*[:.\-]*\s*["\']*([A-Za-z\s]+)["\']*'
+    }
+    
+    # Extract values with improved regex handling
     for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.MULTILINE | re.IGNORECASE)
+        if details[key]:  # Skip if already populated via JSON
+            continue
+        match = re.search(pattern, text, re.IGNORECASE)
         if match:
             details[key] = match.group(1).strip()
     
-    # Combine Surname and Given Name
-    if details['Surname'] and details['Given_Name']:
-        details['Full_Name'] = f"{details['Surname']} {details['Given_Name']}".strip()
+    # Post-process Full_Name if empty (combine Surname + Given_Name)
+    if not details['Full_Name'] and details['Surname'] and details['Given_Name']:
+        details['Full_Name'] = f"{details['Surname']} {details['Given_Name']}"
     
     return details
 
