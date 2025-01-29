@@ -1,6 +1,7 @@
 # AI-based OCR
 
-This Python script extracts key information from Aadhar cards, PAN cards, and Passports using the Together API and Llama Vision model. It processes the image URL provided by the user and returns the extracted details in a structured JSON format.
+A Python-based application that extracts structured data from images of official documents such as Aadhar cards, PAN cards, and Passports using AI-powered text extraction(Together API and Llama Vision model).
+It processes the image URL provided by the user and returns the extracted details in a structured JSON format.
 
 ## Features
 - **Supports Three Document Types**:
