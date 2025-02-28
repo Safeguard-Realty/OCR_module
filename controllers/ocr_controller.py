@@ -21,7 +21,7 @@ async def process_document_controller(image_url: str, doc_type: str, max_retries
     best_result = None
     retries = 0
     last_error = None
-
+    
     while retries <= max_retries:
         try:
             logger.info(f"Attempt {retries+1}/{max_retries+1} for {doc_type} processing")

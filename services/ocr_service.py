@@ -64,6 +64,7 @@ def extract_aadhar_details(image_url: str):
         stop=["<|eot_id|>", "<|eom_id|>"],
         stream=False
     )
+    print(image_url)
     return response.choices[0].message.content
 
 def extract_pan_card_details(image_url: str):
